@@ -10,6 +10,8 @@ ABA = "B. DE DADOS"
 
 
 @st.cache_data(ttl=300)
+
+@st.cache_data(ttl=300)
 def load_data():
 
     creds = Credentials.from_service_account_info(
@@ -21,9 +23,14 @@ def load_data():
     spreadsheet = client.open_by_url(st.secrets["sheet_url"])
     worksheet = spreadsheet.worksheet(ABA)
 
-    df = pd.DataFrame(worksheet.get_all_records())
+    data = worksheet.get_all_values()
 
-    df["DATA"] = pd.to_datetime(df["DATA"], dayfirst=True, errors="coerce")
+    if len(data) < 2:
+        return pd.DataFrame()
+
+    # usa primeira linha como cabeçalho real
+    header = data[0]
+    df = pd.DataFrame(data[1:], columns=header)
 
     return df
 
@@ -122,6 +129,7 @@ if "LATITUDE" in df.columns and "LONGITUDE" in df.columns:
     fig4.update_layout(mapbox_style="open-street-map")
 
     st.plotly_chart(fig4, use_container_width=True)
+
 
 
 
