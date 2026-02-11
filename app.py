@@ -1,8 +1,7 @@
-import streamlit as st
-from modules.data_loader import load_data
-from modules.processor import process_data
-from modules.charts import chart_totais_por_tipo, chart_evolucao
-from modules.exporter import gerar_ppt
+from data_loader import load_data
+from processor import process_data
+from charts import chart_totais_por_tipo
+from exporter import gerar_ppt
 
 st.set_page_config(page_title="Dashboard Fiscalização", layout="wide")
 
@@ -39,4 +38,5 @@ st.download_button(
     file_name="Dashboard_Fiscalizacao_2026.pptx",
     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
 )
+
 
