@@ -12,7 +12,26 @@ st.set_page_config(
 ABA_DASHBOARD = "CONTROLE - B. DADOS"
 
 # =====================================================
-# FUNÇÃO DE CARGA ROBUSTA
+# FUNÇÃO PARA REMOVER DUPLICADAS MANUALMENTE
+# =====================================================
+
+def make_unique(columns):
+    seen = {}
+    new_cols = []
+
+    for col in columns:
+        if col in seen:
+            seen[col] += 1
+            new_cols.append(f"{col}_{seen[col]}")
+        else:
+            seen[col] = 0
+            new_cols.append(col)
+
+    return new_cols
+
+
+# =====================================================
+# CARGA DE DADOS
 # =====================================================
 
 @st.cache_data(ttl=300)
@@ -50,15 +69,15 @@ def load_data():
 
         colunas.append(nome)
 
-    # Remove duplicadas automaticamente
-    colunas_unicas = pd.io.parsers.ParserBase({'names': colunas})._maybe_dedup_names(colunas)
+    # 🔥 Remove duplicadas manualmente
+    colunas = make_unique(colunas)
 
-    df = pd.DataFrame(data[2:], columns=colunas_unicas)
+    df = pd.DataFrame(data[2:], columns=colunas)
 
     # Remove DATA, DIA, MÊS (3 primeiras colunas)
     df = df.iloc[:, 3:]
 
-    # Converte cada coluna individualmente de forma segura
+    # Converte todas colunas para numérico com segurança
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -148,3 +167,4 @@ fig_pizza = px.pie(
 )
 
 st.plotly_chart(fig_pizza, use_container_width=True)
+
