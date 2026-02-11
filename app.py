@@ -43,11 +43,18 @@ def load_data():
     df = df.loc[:, df.columns.notna()]
     df = df.loc[:, df.columns != ""]
 
-    # Converte colunas numéricas automaticamente
+# Força conversão numérica
     for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="ignore")
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.replace(",", ".")
+            .str.replace(" ", "")
+        )
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    return df
+# Remove colunas que ficaram 100% NaN
+    df = df.dropna(axis=1, how="all")
 
 
 # ==========================================
@@ -207,6 +214,7 @@ if st.button("📥 Gerar Relatório em PowerPoint"):
             f,
             file_name="relatorio_fiscalizacao_2026.pptx"
         )
+
 
 
 
