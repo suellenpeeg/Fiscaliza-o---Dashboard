@@ -22,7 +22,9 @@ def load_data():
     # 🔹 Seleciona a ABA específica
     worksheet = spreadsheet.worksheet(ABA_DASHBOARD)
 
-    data = worksheet.get_all_records()
-    df = pd.DataFrame(data)
+    data = worksheet.get_all_values()
+
+    df = pd.DataFrame(data[1:], columns=data[0]))
 
     return df.fillna(0)
+
