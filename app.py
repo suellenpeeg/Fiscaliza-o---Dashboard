@@ -12,7 +12,7 @@ st.set_page_config(
 ABA_DASHBOARD = "CONTROLE - B. DADOS"
 
 # =====================================================
-# FUNÇÃO AJUSTADA PARA SUA PLANILHA (2 LINHAS HEADER)
+# FUNÇÃO ULTRA ESTÁVEL PARA SUA PLANILHA
 # =====================================================
 
 @st.cache_data(ttl=300)
@@ -32,16 +32,15 @@ def load_data():
     if len(data) < 3:
         return pd.DataFrame()
 
-    # Linha 0 = grupos (COMUNICADO, NOTIFICAÇÃO...)
+    # Cabeçalhos
     header_grupo = data[0]
-    # Linha 1 = subgrupo (AÇÕES / B. DADOS)
     header_sub = data[1]
 
-    # Junta os dois cabeçalhos
     colunas = []
     for g, s in zip(header_grupo, header_sub):
         g = g.strip()
         s = s.strip()
+
         if g and s:
             colunas.append(f"{g} - {s}")
         elif g:
@@ -49,20 +48,14 @@ def load_data():
         else:
             colunas.append(s)
 
-    # Dados começam na linha 2
+    # Dados reais
     df = pd.DataFrame(data[2:], columns=colunas)
 
-    # Remove colunas iniciais (DATA / DIA / MÊS)
+    # Remove as 3 primeiras colunas (DATA / DIA / MÊS)
     df = df.iloc[:, 3:]
 
-    # Converte tudo para número quando possível
+    # Converte TUDO para número de forma segura
     for col in df.columns:
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace(",", ".")
-            .str.replace(" ", "")
-        )
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Remove colunas totalmente vazias
@@ -90,7 +83,7 @@ if len(numeric_cols) == 0:
     st.stop()
 
 # =====================================================
-# KPI
+# KPIs
 # =====================================================
 
 total_geral = df[numeric_cols].sum().sum()
@@ -98,12 +91,12 @@ total_geral = df[numeric_cols].sum().sum()
 col1, col2 = st.columns(2)
 
 col1.metric("Total Geral de Ações", int(total_geral))
-col2.metric("Tipos Monitorados", len(numeric_cols))
+col2.metric("Indicadores Monitorados", len(numeric_cols))
 
 st.divider()
 
 # =====================================================
-# EVOLUÇÃO DIÁRIA
+# EVOLUÇÃO
 # =====================================================
 
 df["TOTAL_DIA"] = df[numeric_cols].sum(axis=1)
@@ -120,7 +113,7 @@ st.plotly_chart(fig_evolucao, use_container_width=True)
 st.divider()
 
 # =====================================================
-# RANKING POR TIPO
+# RANKING
 # =====================================================
 
 totais_por_tipo = df[numeric_cols].sum().sort_values(ascending=False)
