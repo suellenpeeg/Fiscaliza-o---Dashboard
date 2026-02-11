@@ -8,9 +8,6 @@ st.set_page_config(page_title="Dashboard Fiscalização", layout="wide")
 
 ABA = "B. DE DADOS"
 
-
-@st.cache_data(ttl=300)
-
 @st.cache_data(ttl=300)
 def load_data():
 
@@ -25,11 +22,14 @@ def load_data():
 
     data = worksheet.get_all_values()
 
-    if len(data) < 2:
-        return pd.DataFrame()
+    # Remove linhas totalmente vazias
+    data = [row for row in data if any(cell.strip() != "" for cell in row)]
 
-    # usa primeira linha como cabeçalho real
     header = data[0]
+
+    # 🔥 LIMPA NOMES DAS COLUNAS
+    header = [col.strip().upper() for col in header]
+
     df = pd.DataFrame(data[1:], columns=header)
 
     return df
@@ -129,6 +129,7 @@ if "LATITUDE" in df.columns and "LONGITUDE" in df.columns:
     fig4.update_layout(mapbox_style="open-street-map")
 
     st.plotly_chart(fig4, use_container_width=True)
+
 
 
 
