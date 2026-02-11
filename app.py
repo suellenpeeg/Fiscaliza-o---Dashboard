@@ -19,42 +19,52 @@ st.set_page_config(
 ABA_DASHBOARD = "CONTROLE - B. DADOS"
 
 # ==========================================
-# CARREGAMENTO DOS DADOS
+# CARREGAMENTO SEGURO DOS DADOS
 # ==========================================
 
 @st.cache_data(ttl=300)
 def load_data():
 
-    creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-
-    client = gspread.authorize(creds)
-
-    spreadsheet = client.open_by_url(st.secrets["sheet_url"])
-    worksheet = spreadsheet.worksheet(ABA_DASHBOARD)
-
-    data = worksheet.get_all_values()
-
-    df = pd.DataFrame(data[1:], columns=data[0])
-
-    # Remove colunas vazias
-    df = df.loc[:, df.columns.notna()]
-    df = df.loc[:, df.columns != ""]
-
-# Força conversão numérica
-    for col in df.columns:
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace(",", ".")
-            .str.replace(" ", "")
+    try:
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
-        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Remove colunas que ficaram 100% NaN
-    df = df.dropna(axis=1, how="all")
+        client = gspread.authorize(creds)
+
+        spreadsheet = client.open_by_url(st.secrets["sheet_url"])
+        worksheet = spreadsheet.worksheet(ABA_DASHBOARD)
+
+        data = worksheet.get_all_values()
+
+        if not data or len(data) < 2:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(data[1:], columns=data[0])
+
+        # Remove colunas vazias
+        df = df.loc[:, df.columns.notna()]
+        df = df.loc[:, df.columns != ""]
+
+        # Converte para numérico quando possível
+        for col in df.columns:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(",", ".")
+                .str.replace(" ", "")
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        # Remove colunas totalmente vazias
+        df = df.dropna(axis=1, how="all")
+
+        return df
+
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return pd.DataFrame()
 
 
 # ==========================================
@@ -108,8 +118,8 @@ st.title("📊 Dashboard Executivo - Fiscalização 2026")
 
 df = load_data()
 
-if df.empty:
-    st.warning("Nenhum dado encontrado.")
+if not isinstance(df, pd.DataFrame) or df.empty:
+    st.warning("Nenhum dado válido encontrado na planilha.")
     st.stop()
 
 # ==========================================
@@ -119,7 +129,8 @@ if df.empty:
 numeric_cols = df.select_dtypes(include="number").columns
 
 if len(numeric_cols) == 0:
-    st.error("Nenhuma coluna numérica encontrada para análise.")
+    st.warning("Nenhuma coluna numérica válida encontrada para análise.")
+    st.dataframe(df)
     st.stop()
 
 # ==========================================
@@ -131,7 +142,7 @@ total_geral = df[numeric_cols].sum().sum()
 col1, col2, col3 = st.columns(3)
 
 col1.metric("Total Geral de Ações", int(total_geral))
-col2.metric("Dias Registrados", len(df))
+col2.metric("Registros (Linhas)", len(df))
 col3.metric("Indicadores Numéricos", len(numeric_cols))
 
 st.divider()
@@ -214,6 +225,7 @@ if st.button("📥 Gerar Relatório em PowerPoint"):
             f,
             file_name="relatorio_fiscalizacao_2026.pptx"
         )
+
 
 
 
