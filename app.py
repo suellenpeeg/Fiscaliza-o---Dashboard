@@ -2,14 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from pptx import Presentation
-from pptx.util import Inches
 import plotly.express as px
-import tempfile
-
-# ==========================================
-# CONFIGURAÇÃO
-# ==========================================
 
 st.set_page_config(
     page_title="Dashboard Executivo - Fiscalização 2026",
@@ -18,138 +11,100 @@ st.set_page_config(
 
 ABA_DASHBOARD = "CONTROLE - B. DADOS"
 
-# ==========================================
-# CARREGAMENTO SEGURO DOS DADOS
-# ==========================================
+# =====================================================
+# FUNÇÃO AJUSTADA PARA SUA PLANILHA (2 LINHAS HEADER)
+# =====================================================
 
 @st.cache_data(ttl=300)
 def load_data():
 
-    try:
-        creds = Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"],
-            scopes=["https://www.googleapis.com/auth/spreadsheets"]
-        )
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
 
-        client = gspread.authorize(creds)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_url(st.secrets["sheet_url"])
+    worksheet = spreadsheet.worksheet(ABA_DASHBOARD)
 
-        spreadsheet = client.open_by_url(st.secrets["sheet_url"])
-        worksheet = spreadsheet.worksheet(ABA_DASHBOARD)
+    data = worksheet.get_all_values()
 
-        data = worksheet.get_all_values()
-
-        if not data or len(data) < 2:
-            return pd.DataFrame()
-
-        df = pd.DataFrame(data[1:], columns=data[0])
-
-        # Remove colunas vazias
-        df = df.loc[:, df.columns.notna()]
-        df = df.loc[:, df.columns != ""]
-
-        # Converte para numérico quando possível
-        for col in df.columns:
-            df[col] = (
-                df[col]
-                .astype(str)
-                .str.replace(",", ".")
-                .str.replace(" ", "")
-            )
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-        # Remove colunas totalmente vazias
-        df = df.dropna(axis=1, how="all")
-
-        return df
-
-    except Exception as e:
-        st.error(f"Erro ao carregar dados: {e}")
+    if len(data) < 3:
         return pd.DataFrame()
 
+    # Linha 0 = grupos (COMUNICADO, NOTIFICAÇÃO...)
+    header_grupo = data[0]
+    # Linha 1 = subgrupo (AÇÕES / B. DADOS)
+    header_sub = data[1]
 
-# ==========================================
-# EXPORTAÇÃO POWERPOINT
-# ==========================================
+    # Junta os dois cabeçalhos
+    colunas = []
+    for g, s in zip(header_grupo, header_sub):
+        g = g.strip()
+        s = s.strip()
+        if g and s:
+            colunas.append(f"{g} - {s}")
+        elif g:
+            colunas.append(g)
+        else:
+            colunas.append(s)
 
-def gerar_ppt(df_resumo):
+    # Dados começam na linha 2
+    df = pd.DataFrame(data[2:], columns=colunas)
 
-    prs = Presentation()
-    slide_layout = prs.slide_layouts[5]
-    slide = prs.slides.add_slide(slide_layout)
+    # Remove colunas iniciais (DATA / DIA / MÊS)
+    df = df.iloc[:, 3:]
 
-    slide.shapes.title.text = "Relatório Executivo - Fiscalização 2026"
+    # Converte tudo para número quando possível
+    for col in df.columns:
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.replace(",", ".")
+            .str.replace(" ", "")
+        )
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    rows, cols = df_resumo.shape
+    # Remove colunas totalmente vazias
+    df = df.dropna(axis=1, how="all")
 
-    left = Inches(0.5)
-    top = Inches(1.5)
-    width = Inches(9)
-    height = Inches(4)
-
-    table = slide.shapes.add_table(
-        rows + 1,
-        cols,
-        left,
-        top,
-        width,
-        height
-    ).table
-
-    # Cabeçalho
-    for col in range(cols):
-        table.cell(0, col).text = str(df_resumo.columns[col])
-
-    # Dados
-    for row in range(rows):
-        for col in range(cols):
-            table.cell(row + 1, col).text = str(df_resumo.iloc[row, col])
-
-    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pptx")
-    prs.save(temp.name)
-
-    return temp.name
+    return df.fillna(0)
 
 
-# ==========================================
+# =====================================================
 # APP
-# ==========================================
+# =====================================================
 
 st.title("📊 Dashboard Executivo - Fiscalização 2026")
 
 df = load_data()
 
-if not isinstance(df, pd.DataFrame) or df.empty:
-    st.warning("Nenhum dado válido encontrado na planilha.")
+if df.empty:
+    st.warning("Não foi possível carregar dados da planilha.")
     st.stop()
-
-# ==========================================
-# IDENTIFICA COLUNAS NUMÉRICAS
-# ==========================================
 
 numeric_cols = df.select_dtypes(include="number").columns
 
 if len(numeric_cols) == 0:
-    st.warning("Nenhuma coluna numérica válida encontrada para análise.")
-    st.dataframe(df)
+    st.warning("Nenhuma coluna numérica encontrada.")
     st.stop()
 
-# ==========================================
-# KPI PRINCIPAL
-# ==========================================
+# =====================================================
+# KPI
+# =====================================================
 
 total_geral = df[numeric_cols].sum().sum()
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 col1.metric("Total Geral de Ações", int(total_geral))
-col2.metric("Registros (Linhas)", len(df))
-col3.metric("Indicadores Numéricos", len(numeric_cols))
+col2.metric("Tipos Monitorados", len(numeric_cols))
 
 st.divider()
 
-# ==========================================
-# EVOLUÇÃO DIÁRIA CONSOLIDADA
-# ==========================================
+# =====================================================
+# EVOLUÇÃO DIÁRIA
+# =====================================================
 
 df["TOTAL_DIA"] = df[numeric_cols].sum(axis=1)
 
@@ -164,69 +119,36 @@ st.plotly_chart(fig_evolucao, use_container_width=True)
 
 st.divider()
 
-# ==========================================
+# =====================================================
 # RANKING POR TIPO
-# ==========================================
+# =====================================================
 
 totais_por_tipo = df[numeric_cols].sum().sort_values(ascending=False)
 
-df_ranking = totais_por_tipo.reset_index()
-df_ranking.columns = ["Tipo", "Total"]
+df_rank = totais_por_tipo.reset_index()
+df_rank.columns = ["Indicador", "Total"]
 
-fig_ranking = px.bar(
-    df_ranking,
+fig_rank = px.bar(
+    df_rank,
     x="Total",
-    y="Tipo",
+    y="Indicador",
     orientation="h",
     title="Ranking por Tipo de Ação"
 )
 
-st.plotly_chart(fig_ranking, use_container_width=True)
+st.plotly_chart(fig_rank, use_container_width=True)
 
 st.divider()
 
-# ==========================================
-# PARTICIPAÇÃO PERCENTUAL
-# ==========================================
+# =====================================================
+# PARTICIPAÇÃO
+# =====================================================
 
 fig_pizza = px.pie(
-    df_ranking,
+    df_rank,
     values="Total",
-    names="Tipo",
-    title="Participação Percentual por Tipo"
+    names="Indicador",
+    title="Participação Percentual"
 )
 
 st.plotly_chart(fig_pizza, use_container_width=True)
-
-st.divider()
-
-# ==========================================
-# TABELA COMPLETA
-# ==========================================
-
-st.subheader("Base Completa")
-st.dataframe(df, use_container_width=True)
-
-st.divider()
-
-# ==========================================
-# EXPORTAÇÃO POWERPOINT
-# ==========================================
-
-st.subheader("Exportação Executiva")
-
-if st.button("📥 Gerar Relatório em PowerPoint"):
-
-    ppt_file = gerar_ppt(df_ranking)
-
-    with open(ppt_file, "rb") as f:
-        st.download_button(
-            "Baixar PowerPoint",
-            f,
-            file_name="relatorio_fiscalizacao_2026.pptx"
-        )
-
-
-
-
-
