@@ -12,7 +12,7 @@ st.set_page_config(
 ABA_DASHBOARD = "CONTROLE - B. DADOS"
 
 # =====================================================
-# FUNÇÃO ULTRA ESTÁVEL PARA SUA PLANILHA
+# FUNÇÃO DE CARGA ROBUSTA
 # =====================================================
 
 @st.cache_data(ttl=300)
@@ -32,33 +32,36 @@ def load_data():
     if len(data) < 3:
         return pd.DataFrame()
 
-    # Cabeçalhos
     header_grupo = data[0]
     header_sub = data[1]
 
     colunas = []
-    for g, s in zip(header_grupo, header_sub):
-        g = g.strip()
-        s = s.strip()
 
-        if g and s:
-            colunas.append(f"{g} - {s}")
-        elif g:
-            colunas.append(g)
+    for i in range(len(header_grupo)):
+        grupo = header_grupo[i].strip()
+        sub = header_sub[i].strip()
+
+        if grupo and sub:
+            nome = f"{grupo} - {sub}"
+        elif grupo:
+            nome = grupo
         else:
-            colunas.append(s)
+            nome = sub
 
-    # Dados reais
-    df = pd.DataFrame(data[2:], columns=colunas)
+        colunas.append(nome)
 
-    # Remove as 3 primeiras colunas (DATA / DIA / MÊS)
+    # Remove duplicadas automaticamente
+    colunas_unicas = pd.io.parsers.ParserBase({'names': colunas})._maybe_dedup_names(colunas)
+
+    df = pd.DataFrame(data[2:], columns=colunas_unicas)
+
+    # Remove DATA, DIA, MÊS (3 primeiras colunas)
     df = df.iloc[:, 3:]
 
-    # Converte TUDO para número de forma segura
+    # Converte cada coluna individualmente de forma segura
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Remove colunas totalmente vazias
     df = df.dropna(axis=1, how="all")
 
     return df.fillna(0)
@@ -72,7 +75,7 @@ st.title("📊 Dashboard Executivo - Fiscalização 2026")
 
 df = load_data()
 
-if df.empty:
+if df is None or df.empty:
     st.warning("Não foi possível carregar dados da planilha.")
     st.stop()
 
@@ -96,7 +99,7 @@ col2.metric("Indicadores Monitorados", len(numeric_cols))
 st.divider()
 
 # =====================================================
-# EVOLUÇÃO
+# EVOLUÇÃO DIÁRIA
 # =====================================================
 
 df["TOTAL_DIA"] = df[numeric_cols].sum(axis=1)
