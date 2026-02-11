@@ -4,15 +4,12 @@ import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
 
-st.set_page_config(
-    page_title="Dashboard Executivo - Fiscalização 2026",
-    layout="wide"
-)
+st.set_page_config(page_title="Dashboard Executivo 2026", layout="wide")
 
 ABA_DASHBOARD = "CONTROLE - B. DADOS"
 
 # =====================================================
-# FUNÇÃO PARA REMOVER DUPLICADAS MANUALMENTE
+# FUNÇÃO AUXILIAR
 # =====================================================
 
 def make_unique(columns):
@@ -48,9 +45,6 @@ def load_data():
 
     data = worksheet.get_all_values()
 
-    if len(data) < 3:
-        return pd.DataFrame()
-
     header_grupo = data[0]
     header_sub = data[1]
 
@@ -69,21 +63,23 @@ def load_data():
 
         colunas.append(nome)
 
-    # 🔥 Remove duplicadas manualmente
     colunas = make_unique(colunas)
 
     df = pd.DataFrame(data[2:], columns=colunas)
 
-    # Remove DATA, DIA, MÊS (3 primeiras colunas)
-    df = df.iloc[:, 3:]
+    # Mantém DATA (primeira coluna)
+    df.rename(columns={df.columns[0]: "DATA"}, inplace=True)
 
-    # Converte todas colunas para numérico com segurança
-    for col in df.columns:
+    # Remove colunas texto intermediárias
+    df = df.drop(columns=df.columns[1:3])
+
+    # Converte numérico
+    for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    df = df.dropna(axis=1, how="all")
+    df = df.fillna(0)
 
-    return df.fillna(0)
+    return df
 
 
 # =====================================================
@@ -94,77 +90,92 @@ st.title("📊 Dashboard Executivo - Fiscalização 2026")
 
 df = load_data()
 
-if df is None or df.empty:
-    st.warning("Não foi possível carregar dados da planilha.")
+if df.empty:
+    st.warning("Sem dados.")
     st.stop()
 
 numeric_cols = df.select_dtypes(include="number").columns
 
-if len(numeric_cols) == 0:
-    st.warning("Nenhuma coluna numérica encontrada.")
-    st.stop()
-
 # =====================================================
-# KPIs
-# =====================================================
-
-total_geral = df[numeric_cols].sum().sum()
-
-col1, col2 = st.columns(2)
-
-col1.metric("Total Geral de Ações", int(total_geral))
-col2.metric("Indicadores Monitorados", len(numeric_cols))
-
-st.divider()
-
-# =====================================================
-# EVOLUÇÃO DIÁRIA
+# KPI
 # =====================================================
 
 df["TOTAL_DIA"] = df[numeric_cols].sum(axis=1)
 
-fig_evolucao = px.line(
-    df,
-    y="TOTAL_DIA",
-    title="Evolução Diária Consolidada",
-    markers=True
-)
+total_geral = df["TOTAL_DIA"].sum()
+dia_max = df.loc[df["TOTAL_DIA"].idxmax(), "DATA"]
+valor_max = df["TOTAL_DIA"].max()
 
-st.plotly_chart(fig_evolucao, use_container_width=True)
+acoes_cols = [c for c in numeric_cols if "AÇÕES" in c.upper()]
+bd_cols = [c for c in numeric_cols if "B. DADOS" in c.upper()]
+
+total_acoes = df[acoes_cols].sum().sum() if acoes_cols else 0
+total_bd = df[bd_cols].sum().sum() if bd_cols else 0
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric("Total Geral", int(total_geral))
+col2.metric("Total Ações", int(total_acoes))
+col3.metric("Total B. Dados", int(total_bd))
+col4.metric("Dia mais produtivo", f"{dia_max} ({int(valor_max)})")
 
 st.divider()
 
 # =====================================================
-# RANKING
+# EVOLUÇÃO
 # =====================================================
 
-totais_por_tipo = df[numeric_cols].sum().sort_values(ascending=False)
+fig = px.line(
+    df,
+    x="DATA",
+    y="TOTAL_DIA",
+    markers=True,
+    title="Evolução Diária Consolidada"
+)
 
-df_rank = totais_por_tipo.reset_index()
+fig.update_layout(
+    plot_bgcolor="white",
+    title_font_size=20
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+st.divider()
+
+# =====================================================
+# TOP 5
+# =====================================================
+
+totais = df[numeric_cols].sum().sort_values(ascending=False).head(5)
+df_rank = totais.reset_index()
 df_rank.columns = ["Indicador", "Total"]
 
-fig_rank = px.bar(
+fig2 = px.bar(
     df_rank,
     x="Total",
     y="Indicador",
     orientation="h",
-    title="Ranking por Tipo de Ação"
+    title="Top 5 Indicadores"
 )
 
-st.plotly_chart(fig_rank, use_container_width=True)
+fig2.update_layout(plot_bgcolor="white")
+
+st.plotly_chart(fig2, use_container_width=True)
 
 st.divider()
 
 # =====================================================
-# PARTICIPAÇÃO
+# HEATMAP
 # =====================================================
 
-fig_pizza = px.pie(
-    df_rank,
-    values="Total",
-    names="Indicador",
-    title="Participação Percentual"
+heatmap_df = df[["DATA", "TOTAL_DIA"]]
+
+fig3 = px.imshow(
+    [heatmap_df["TOTAL_DIA"].values],
+    labels=dict(x="Dias", color="Total"),
+    title="Mapa de Intensidade Diária"
 )
 
-st.plotly_chart(fig_pizza, use_container_width=True)
+st.plotly_chart(fig3, use_container_width=True)
+
 
