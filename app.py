@@ -12,7 +12,7 @@ import tempfile
 # ==========================================
 
 st.set_page_config(
-    page_title="Dashboard Fiscalização 2026",
+    page_title="Dashboard Executivo - Fiscalização 2026",
     layout="wide"
 )
 
@@ -43,7 +43,7 @@ def load_data():
     df = df.loc[:, df.columns.notna()]
     df = df.loc[:, df.columns != ""]
 
-    # Tenta converter números
+    # Converte colunas numéricas automaticamente
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="ignore")
 
@@ -54,7 +54,7 @@ def load_data():
 # EXPORTAÇÃO POWERPOINT
 # ==========================================
 
-def gerar_ppt(df, total_geral):
+def gerar_ppt(df_resumo):
 
     prs = Presentation()
     slide_layout = prs.slide_layouts[5]
@@ -62,15 +62,15 @@ def gerar_ppt(df, total_geral):
 
     slide.shapes.title.text = "Relatório Executivo - Fiscalização 2026"
 
+    rows, cols = df_resumo.shape
+
     left = Inches(0.5)
     top = Inches(1.5)
     width = Inches(9)
     height = Inches(4)
 
-    rows, cols = df.shape
-
     table = slide.shapes.add_table(
-        min(rows + 1, 15),
+        rows + 1,
         cols,
         left,
         top,
@@ -78,12 +78,14 @@ def gerar_ppt(df, total_geral):
         height
     ).table
 
+    # Cabeçalho
     for col in range(cols):
-        table.cell(0, col).text = str(df.columns[col])
+        table.cell(0, col).text = str(df_resumo.columns[col])
 
-    for row in range(min(rows, 14)):
+    # Dados
+    for row in range(rows):
         for col in range(cols):
-            table.cell(row + 1, col).text = str(df.iloc[row, col])
+            table.cell(row + 1, col).text = str(df_resumo.iloc[row, col])
 
     temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pptx")
     prs.save(temp.name)
@@ -109,6 +111,10 @@ if df.empty:
 
 numeric_cols = df.select_dtypes(include="number").columns
 
+if len(numeric_cols) == 0:
+    st.error("Nenhuma coluna numérica encontrada para análise.")
+    st.stop()
+
 # ==========================================
 # KPI PRINCIPAL
 # ==========================================
@@ -119,7 +125,7 @@ col1, col2, col3 = st.columns(3)
 
 col1.metric("Total Geral de Ações", int(total_geral))
 col2.metric("Dias Registrados", len(df))
-col3.metric("Tipos de Indicadores", len(numeric_cols))
+col3.metric("Indicadores Numéricos", len(numeric_cols))
 
 st.divider()
 
@@ -132,7 +138,7 @@ df["TOTAL_DIA"] = df[numeric_cols].sum(axis=1)
 fig_evolucao = px.line(
     df,
     y="TOTAL_DIA",
-    title="Evolução Diária de Ações",
+    title="Evolução Diária Consolidada",
     markers=True
 )
 
@@ -141,14 +147,18 @@ st.plotly_chart(fig_evolucao, use_container_width=True)
 st.divider()
 
 # ==========================================
-# TOTAL POR TIPO (RANKING)
+# RANKING POR TIPO
 # ==========================================
 
 totais_por_tipo = df[numeric_cols].sum().sort_values(ascending=False)
 
+df_ranking = totais_por_tipo.reset_index()
+df_ranking.columns = ["Tipo", "Total"]
+
 fig_ranking = px.bar(
-    x=totais_por_tipo.values,
-    y=totais_por_tipo.index,
+    df_ranking,
+    x="Total",
+    y="Tipo",
     orientation="h",
     title="Ranking por Tipo de Ação"
 )
@@ -162,8 +172,9 @@ st.divider()
 # ==========================================
 
 fig_pizza = px.pie(
-    values=totais_por_tipo.values,
-    names=totais_por_tipo.index,
+    df_ranking,
+    values="Total",
+    names="Tipo",
     title="Participação Percentual por Tipo"
 )
 
@@ -181,12 +192,14 @@ st.dataframe(df, use_container_width=True)
 st.divider()
 
 # ==========================================
-# EXPORTAÇÃO
+# EXPORTAÇÃO POWERPOINT
 # ==========================================
 
-if st.button("📥 Exportar Relatório em PowerPoint"):
+st.subheader("Exportação Executiva")
 
-    ppt_file = gerar_ppt(df, total_geral)
+if st.button("📥 Gerar Relatório em PowerPoint"):
+
+    ppt_file = gerar_ppt(df_ranking)
 
     with open(ppt_file, "rb") as f:
         st.download_button(
@@ -194,8 +207,6 @@ if st.button("📥 Exportar Relatório em PowerPoint"):
             f,
             file_name="relatorio_fiscalizacao_2026.pptx"
         )
-
-
 
 
 
