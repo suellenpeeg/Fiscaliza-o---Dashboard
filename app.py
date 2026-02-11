@@ -6,7 +6,7 @@ import plotly.express as px
 
 st.set_page_config(page_title="Dashboard Fiscalização", layout="wide")
 
-ABA = "BANCO DE DADOS"
+ABA = "B. DE DADOS"
 
 
 @st.cache_data(ttl=300)
@@ -122,5 +122,6 @@ if "LATITUDE" in df.columns and "LONGITUDE" in df.columns:
     fig4.update_layout(mapbox_style="open-street-map")
 
     st.plotly_chart(fig4, use_container_width=True)
+
 
 
