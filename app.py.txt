@@ -1,0 +1,41 @@
+import streamlit as st
+from modules.data_loader import load_data
+from modules.processor import process_data
+from modules.charts import chart_totais_por_tipo, chart_evolucao
+from modules.exporter import gerar_ppt
+
+st.set_page_config(page_title="Dashboard Fiscalização", layout="wide")
+
+st.title("📊 Painel de Controle – Fiscalização 2026")
+
+df = load_data()
+df = process_data(df)
+
+# KPIs
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric("Total Ações", int(df["TOTAL_ACOES"].sum()))
+col2.metric("Total Banco", int(df["TOTAL_BD"].sum()))
+col3.metric("Conformidade Média", f"{df['CONFORMIDADE'].mean():.1f}%")
+col4.metric("Média Diária", f"{df['TOTAL_ACOES'].mean():.1f}")
+
+st.divider()
+
+# Gráficos
+fig1 = chart_totais_por_tipo(df)
+fig2 = chart_evolucao(df)
+
+st.plotly_chart(fig1, use_container_width=True)
+st.plotly_chart(fig2, use_container_width=True)
+
+st.divider()
+
+# Exportação PPT
+ppt_file = gerar_ppt(df, fig1, fig2)
+
+st.download_button(
+    label="📥 Baixar Apresentação PowerPoint",
+    data=ppt_file,
+    file_name="Dashboard_Fiscalizacao_2026.pptx",
+    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+)
